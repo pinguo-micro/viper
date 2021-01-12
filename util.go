@@ -35,12 +35,16 @@ func (pe ConfigParseError) Error() string {
 
 // toCaseInsensitiveValue checks if the value is a  map;
 // if so, create a copy and lower-case the keys recursively.
-func toCaseInsensitiveValue(value interface{}) interface{} {
+func toCaseInsensitiveValue(value interface{}, senstive KeyCaseSensitiveType) interface{} {
+	if senstive == KeyCaseSensitiveYes {
+		return value
+	}
+
 	switch v := value.(type) {
 	case map[interface{}]interface{}:
-		value = copyAndInsensitiviseMap(cast.ToStringMap(v))
+		value = copyAndInsensitiviseMap(cast.ToStringMap(v), senstive)
 	case map[string]interface{}:
-		value = copyAndInsensitiviseMap(v)
+		value = copyAndInsensitiviseMap(v, senstive)
 	}
 
 	return value
@@ -48,38 +52,46 @@ func toCaseInsensitiveValue(value interface{}) interface{} {
 
 // copyAndInsensitiviseMap behaves like insensitiviseMap, but creates a copy of
 // any map it makes case insensitive.
-func copyAndInsensitiviseMap(m map[string]interface{}) map[string]interface{} {
+func copyAndInsensitiviseMap(m map[string]interface{}, senstive KeyCaseSensitiveType) map[string]interface{} {
 	nm := make(map[string]interface{})
 
 	for key, val := range m {
-		lkey := strings.ToLower(key)
+		lkey := key
+		if senstive == KeyCaseSensitiveNo {
+			lkey = strings.ToLower(lkey)
+		}
 		switch v := val.(type) {
 		case map[interface{}]interface{}:
-			nm[lkey] = copyAndInsensitiviseMap(cast.ToStringMap(v))
+			nm[lkey] = copyAndInsensitiviseMap(cast.ToStringMap(v), senstive)
 		case map[string]interface{}:
-			nm[lkey] = copyAndInsensitiviseMap(v)
+			nm[lkey] = copyAndInsensitiviseMap(v, senstive)
 		default:
 			nm[lkey] = v
+		}
+		if senstive == KeyCaseSensitiveBoth {
+			nm[strings.ToLower(lkey)] = nm[lkey]
 		}
 	}
 
 	return nm
 }
 
-func insensitiviseMap(m map[string]interface{}) {
+func insensitiviseMap(m map[string]interface{}, senstive KeyCaseSensitiveType) {
 	for key, val := range m {
 		switch val.(type) {
 		case map[interface{}]interface{}:
 			// nested map: cast and recursively insensitivise
 			val = cast.ToStringMap(val)
-			insensitiviseMap(val.(map[string]interface{}))
+			insensitiviseMap(val.(map[string]interface{}), senstive)
 		case map[string]interface{}:
 			// nested map: recursively insensitivise
-			insensitiviseMap(val.(map[string]interface{}))
+			insensitiviseMap(val.(map[string]interface{}), senstive)
 		}
-
-		lower := strings.ToLower(key)
-		if key != lower {
+		lower := key
+		if senstive == KeyCaseSensitiveNo {
+			lower = strings.ToLower(key)
+		}
+		if key != lower && senstive != KeyCaseSensitiveBoth {
 			// remove old key (not lower-cased)
 			delete(m, key)
 		}

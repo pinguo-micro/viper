@@ -50,13 +50,13 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const (
-	KeyCaseSensitiveYes  KeyCaseSenstive = 1
-	KeyCaseSensitiveNo   KeyCaseSenstive = 2
-	KeyCaseSensitiveBoth KeyCaseSenstive = 3
-)
+type KeyCaseSensitiveType int
 
-type KeyCaseSenstive int8
+const (
+	KeyCaseSensitiveYes  KeyCaseSensitiveType = 1
+	KeyCaseSensitiveNo   KeyCaseSensitiveType = 2
+	KeyCaseSensitiveBoth KeyCaseSensitiveType = 3
+)
 
 // ConfigMarshalError happens when failing to marshal the configuration.
 type ConfigMarshalError struct {
@@ -218,7 +218,7 @@ type Viper struct {
 	aliases        map[string]string
 	typeByDefValue bool
 
-	keyCaseSensitive KeyCaseSenstive
+	keyCaseSensitive KeyCaseSensitiveType
 
 	// Store read properties on the object so that we can write back in order with comments.
 	// This will only be used if the configuration read is a properties file.
@@ -261,7 +261,7 @@ func (fn optionFunc) apply(v *Viper) {
 	fn(v)
 }
 
-func KeyCaseSensitive(n KeyCaseSenstive) Option {
+func KeyCaseSensitive(n KeyCaseSensitiveType) Option {
 	return optionFunc(func(v *Viper) {
 		v.keyCaseSensitive = n
 	})
@@ -1394,7 +1394,7 @@ func SetDefault(key string, value interface{}) { v.SetDefault(key, value) }
 func (v *Viper) SetDefault(key string, value interface{}) {
 	// If alias passed in, then set the proper default
 	key = v.realKey(strings.ToLower(key))
-	value = toCaseInsensitiveValue(value)
+	value = toCaseInsensitiveValue(value, v.keyCaseSensitive)
 
 	path := strings.Split(key, v.keyDelim)
 	lastKey := strings.ToLower(path[len(path)-1])
@@ -1412,14 +1412,22 @@ func Set(key string, value interface{}) { v.Set(key, value) }
 
 func (v *Viper) Set(key string, value interface{}) {
 	// If alias passed in, then set the proper override
-	key = v.realKey(strings.ToLower(key))
-	value = toCaseInsensitiveValue(value)
+	if v.keyCaseSensitive == KeyCaseSensitiveNo {
+		key = strings.ToLower(key)
+	}
+	key = v.realKey(key)
+	value = toCaseInsensitiveValue(value, v.keyCaseSensitive)
 
 	path := strings.Split(key, v.keyDelim)
-	lastKey := strings.ToLower(path[len(path)-1])
+	lastKey := path[len(path)-1]
 	deepestMap := deepSearch(v.override, path[0:len(path)-1])
 
 	// set innermost value
+	if v.keyCaseSensitive == KeyCaseSensitiveNo {
+		lastKey = strings.ToLower(lastKey)
+	} else if v.keyCaseSensitive == KeyCaseSensitiveBoth {
+		deepestMap[strings.ToLower(lastKey)] = value
+	}
 	deepestMap[lastKey] = value
 }
 
@@ -1505,7 +1513,7 @@ func (v *Viper) MergeConfigMap(cfg map[string]interface{}) error {
 	if v.config == nil {
 		v.config = make(map[string]interface{})
 	}
-	insensitiviseMap(cfg)
+	insensitiviseMap(cfg, v.keyCaseSensitive)
 	mergeMaps(cfg, v.config, nil)
 	return nil
 }
@@ -1669,7 +1677,7 @@ func (v *Viper) unmarshalReader(in io.Reader, c map[string]interface{}) error {
 		}
 	}
 
-	insensitiviseMap(c)
+	insensitiviseMap(c, v.keyCaseSensitive)
 	return nil
 }
 
