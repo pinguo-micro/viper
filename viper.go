@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/pelletier/go-toml"
 	"io"
 	"log"
 	"os"
@@ -40,15 +41,21 @@ import (
 	"github.com/hashicorp/hcl/hcl/printer"
 	"github.com/magiconair/properties"
 	"github.com/mitchellh/mapstructure"
-	"github.com/pelletier/go-toml"
 	"github.com/spf13/afero"
 	"github.com/spf13/cast"
 	jww "github.com/spf13/jwalterweatherman"
 	"github.com/spf13/pflag"
 	"github.com/subosito/gotenv"
-	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v2"
 )
+
+const (
+	KeyCaseSensitiveYes  KeyCaseSenstive = 1
+	KeyCaseSensitiveNo   KeyCaseSenstive = 2
+	KeyCaseSensitiveBoth KeyCaseSenstive = 3
+)
+
+type KeyCaseSenstive int8
 
 // ConfigMarshalError happens when failing to marshal the configuration.
 type ConfigMarshalError struct {
@@ -210,6 +217,8 @@ type Viper struct {
 	aliases        map[string]string
 	typeByDefValue bool
 
+	keyCaseSensitive KeyCaseSenstive
+
 	// Store read properties on the object so that we can write back in order with comments.
 	// This will only be used if the configuration read is a properties file.
 	properties *properties.Properties
@@ -232,6 +241,7 @@ func New() *Viper {
 	v.env = make(map[string][]string)
 	v.aliases = make(map[string]string)
 	v.typeByDefValue = false
+	v.keyCaseSensitive = KeyCaseSensitiveNo
 
 	return v
 }
@@ -248,6 +258,12 @@ type optionFunc func(v *Viper)
 
 func (fn optionFunc) apply(v *Viper) {
 	fn(v)
+}
+
+func KeyCaseSensitive(n KeyCaseSenstive) Option {
+	return optionFunc(func(v *Viper) {
+		v.keyCaseSensitive = n
+	})
 }
 
 // KeyDelimiter sets the delimiter used for determining key parts.
